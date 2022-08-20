@@ -82,5 +82,43 @@ namespace TextGame.Console.ExtensionMethods
             strings.Select((s, i) => s.InsertArrowBefore(i == index));
 
         #endregion Insert Arrow Before and/or After by index
+
+        #region Border
+
+        /// <summary>
+        /// Returns the collection of strings with a simple border around it using '_' and '|' characters
+        /// </summary>
+        /// <param name="strings"></param>
+        /// <param name="borderWidth"></param>
+        /// <returns></returns>
+        public static IEnumerable<string> InsideBorder(this IEnumerable<string> strings, int borderWidth, bool centerInsideBorder)
+        {
+            // If BorderWidth is too small, reset it based on the longest string provided.
+            if(strings.Any(s => borderWidth <= s.Length ))
+            {
+                borderWidth = strings.Max(s => s.Length) + 6;
+            }
+
+            if (centerInsideBorder)
+            {
+                strings = strings.PadToCenter(borderWidth - 1);
+            }
+
+            var paddingWidth = borderWidth;
+
+            var topBorder = new string[]
+            {
+                " _".PadRight(paddingWidth, '_') + "_ ",
+                "| ".PadRight(paddingWidth) + " |"
+            };
+
+            var textLines = strings.PadRightToEqualLengths().Select(t => $"| {t.PadRight(paddingWidth - 1)}|");
+
+            var bottomBorder = new string[] { "|".PadRight(paddingWidth, '_') + "_|" };
+
+            return topBorder.Concat(textLines).Concat(bottomBorder);
+        }
+
+        #endregion
     }
 }

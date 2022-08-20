@@ -34,13 +34,18 @@ namespace TextGame.Console.Screen
         /// </summary>
         private MenuArrowPosition _menuArrowPosition;
 
+        /// <summary>
+        /// The type of borders to print screens with - Either None, Just Menus, Just Screens, or Screens And Menus
+        /// </summary>
+        private BorderStyle _borderStyle;
+
         #endregion
 
         #region Constructors
 
-        public ScreenPrinter() : this(0, System.Console.WindowWidth, WriteLineStyle.Normal, PrintScreenAlignment.Centered, MenuArrowPosition.BeforeAndAfter) { }
+        public ScreenPrinter() : this(35, System.Console.WindowWidth, WriteLineStyle.SleepPerCharacter, PrintScreenAlignment.Centered, MenuArrowPosition.BeforeAndAfter, BorderStyle.MenuCenteredAndScreen) { }
 
-        public ScreenPrinter(int sleepTimer, int screenWidth, WriteLineStyle writeLineStyle, PrintScreenAlignment screenAlignment, MenuArrowPosition menuArrowPosition)
+        public ScreenPrinter(int sleepTimer, int screenWidth, WriteLineStyle writeLineStyle, PrintScreenAlignment screenAlignment, MenuArrowPosition menuArrowPosition, BorderStyle borderStyle)
         {
             if(screenWidth <= 0)
             {
@@ -53,6 +58,7 @@ namespace TextGame.Console.Screen
             _writeLineStyle = writeLineStyle;
             _screenAlignment = screenAlignment;
             _menuArrowPosition = menuArrowPosition;
+            _borderStyle = borderStyle;
         }
 
         #endregion
@@ -66,12 +72,13 @@ namespace TextGame.Console.Screen
         /// <param name="screenWidth"></param>
         /// <param name="writeLineStyle"></param>
         /// <param name="screenAlignment"></param>
-        public void UpdateSettings(int? sleepTimer = null, int? screenWidth = null, WriteLineStyle? writeLineStyle = null, PrintScreenAlignment? screenAlignment = null)
+        public void UpdateSettings(int? sleepTimer = null, int? screenWidth = null, WriteLineStyle? writeLineStyle = null, PrintScreenAlignment? screenAlignment = null, BorderStyle? borderStyle = null)
         {
             _sleepTimer = sleepTimer ?? _sleepTimer;
             _screenWidth = screenWidth ?? _screenWidth;
             _writeLineStyle = writeLineStyle ?? _writeLineStyle;
             _screenAlignment = screenAlignment ?? _screenAlignment;
+            _borderStyle = borderStyle ?? _borderStyle;
         }
 
         /// <summary>
@@ -90,46 +97,41 @@ namespace TextGame.Console.Screen
         /// <param name="clearBeforePrint"></param>
         public void PrintScreen(IEnumerable<string> strings, bool clearBeforePrint = false)
         {
-            if (clearBeforePrint)
-            {
-                System.Console.Clear();
-            }
+            strings = PrepForPrinting(strings, clearBeforePrint);
 
-            if(_screenAlignment.IsCenteringVertically())
-            {
-                ClearScreenAndSkipLines(strings.Count());
-            }
-
-            Print(_screenAlignment.IsCenteringHorizontally() ? strings.PadToCenter(_screenWidth) : strings);
+            Print(strings);
         }
 
         /// <summary>
         /// Print a Menu Screen, and allow the user to cycle up/down and click enter on the menuOption that they wish to select. 
         /// Returns the index of menuOptions that was selected. SleepTimer/WriteLineStyle as disabled during looping of screen
         /// to avoid delays when reprinting the menu selection. By default will not clear before printing unless Centering Vertically.
+        /// Can optionally pass in a MenuBorderSize which will be used if MenuBorder style is enabled. If MenuBorderSize is not 
+        /// set then the Border will be set based on the longest menuOptions.Length.
         /// </summary>
         /// <param name="strings"></param>
         /// <param name="menuOptions"></param>
         /// <param name="clearBeforePrinting"></param>
         /// <returns></returns>
-        public int PrintMenuGetIndexSelected(IEnumerable<string> strings, IEnumerable<string> menuOptions, bool clearBeforePrinting = false)
+        public int PrintMenuGetIndexSelected(IEnumerable<string> strings, IEnumerable<string> menuOptions, bool clearBeforePrinting = false, int menuBorderSize = 0)
         {
             var selectionMade = false;
             var selectedIndex = 0;
 
-            PrintScreen(clearBeforePrinting, strings, menuOptions.ApplyArrows(selectedIndex, _menuArrowPosition));
+            // Print Screen the first time using current settings.
+            PrintScreen(clearBeforePrinting, strings, PrepMenuOptions(menuOptions, selectedIndex, menuBorderSize));
 
             // store current sleepTimer and writeLineStyle to reset later
             var originalSleepTimer = _sleepTimer;
             var originalWriteLineStyle = _writeLineStyle;
 
-            // set sleepTimer to 0 and writeLineStyle to normal to avoid delays when printing menus
+            // set sleepTimer to 0 and writeLineStyle to normal to avoid delays when printing Menu Screens
             UpdateSettings(sleepTimer: 0, writeLineStyle: WriteLineStyle.Normal);
 
-            // Loop to keep printing and getting input
+            // Loop to keep printing until input is received (User clicks Enter)
             while (!selectionMade)
             {
-                PrintScreen(clearBeforePrinting, strings, menuOptions.ApplyArrows(selectedIndex, _menuArrowPosition));
+                PrintScreen(clearBeforePrinting, strings, PrepMenuOptions(menuOptions, selectedIndex, menuBorderSize));
 
                 selectionMade = System.Console.ReadKey().TryGetIndex(menuOptions.Count(), ref selectedIndex);
             }
@@ -143,6 +145,35 @@ namespace TextGame.Console.Screen
         #endregion
 
         #region Private Helper Methods
+
+        /// <summary>
+        /// Clear Screen before printing depending upon bool passed in. 
+        /// Clear Screen and Skip Lines if Centering Vertically. 
+        /// Apply Horizontal Padding to each string if Centering Horizontally. 
+        /// Apply Border if ScreenBorder is Enabled. Then return the strings.
+        /// </summary>
+        /// <param name="strings"></param>
+        /// <param name="clearBeforePrint"></param>
+        /// <returns></returns>
+        private IEnumerable<string> PrepForPrinting(IEnumerable<string> strings, bool clearBeforePrint)
+        {
+            if (clearBeforePrint)
+            {
+                System.Console.Clear();
+            }
+
+            if (_screenAlignment.IsCenteringVertically())
+            {
+                ClearScreenAndSkipLines(strings.Count());
+            }
+
+            if (_borderStyle.IsScreenBorderEnabled())
+            {
+                strings = strings.InsideBorder(strings.Max(s => s.Length), _screenAlignment.IsCenteringHorizontally());
+            }
+
+            return _screenAlignment.IsCenteringHorizontally() ? strings.PadToCenter(_screenWidth) : strings;
+        }
 
         /// <summary>
         /// Clear the screen using Console.Clear, and then use the numberOfStringsToPrint to calculate how many
@@ -183,7 +214,7 @@ namespace TextGame.Console.Screen
                 case WriteLineStyle.SleepPerCharacter:
                     foreach (var c in str)
                     {
-                        if (c != ' ')
+                        if (c != ' ' && c != '_' && c != '|')
                         {
                             Thread.Sleep(_sleepTimer);
                         }
@@ -199,6 +230,25 @@ namespace TextGame.Console.Screen
 
             // This fixes a bug so that when we press a key while a screen is being printed, the key press is ignored.
             while (System.Console.KeyAvailable) { System.Console.ReadKey(true); }
+        }
+
+        /// <summary>
+        /// Apply Border/Center if Enabled. Apply Arrows to the menuOption at the selectedIndex.
+        /// </summary>
+        /// <param name="menuOptions"></param>
+        /// <param name="selectedIndex"></param>
+        /// <param name="menuBorderSize"></param>
+        /// <returns></returns>
+        IEnumerable<string> PrepMenuOptions(IEnumerable<string> menuOptions, int selectedIndex, int menuBorderSize)
+        {
+            menuOptions = menuOptions.ApplyArrows(selectedIndex, _menuArrowPosition);
+
+            if (_borderStyle.IsMenuBorderEnabled())
+            {
+                menuOptions = menuOptions.InsideBorder(menuBorderSize, _borderStyle.IsMenuCenteringEnabled());
+            }
+
+            return menuOptions;
         }
 
         #endregion
