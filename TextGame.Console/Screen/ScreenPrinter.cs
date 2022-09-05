@@ -142,6 +142,8 @@ namespace TextGame.Console.Screen
             return selectedIndex;
         }
 
+        public char ReadKey() => System.Console.ReadKey().KeyChar;
+
         #endregion
 
         #region Private Helper Methods
@@ -184,7 +186,7 @@ namespace TextGame.Console.Screen
         {
             System.Console.Clear();
 
-            var numberOfLinesToSkip = System.Console.WindowHeight / 2 - numberOfStringsToPrint / 2;
+            var numberOfLinesToSkip = (System.Console.WindowHeight - numberOfStringsToPrint) / 2;
 
             System.Console.Write(new string('\n', numberOfLinesToSkip));
         }
